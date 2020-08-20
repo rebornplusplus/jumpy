@@ -18,6 +18,7 @@ class Spritesheet:
 
 class Player(pg.sprite.Sprite):
 	def __init__(self, game):
+		self._layer = PLAYER_LAYER
 		self.groups = game.all_sprites
 		pg.sprite.Sprite.__init__(self, self.groups)
 
@@ -78,6 +79,7 @@ class Player(pg.sprite.Sprite):
 	
 	def update(self):
 		self.animate()
+		self.mask = pg.mask.from_surface(self.image)
 
 		self.acc = vec(0, PLAYER_GRAV)
 		
@@ -136,13 +138,33 @@ class Player(pg.sprite.Sprite):
 			if now - self.last_update > 350:
 				self.last_update = now
 				self.current_frame = (self.current_frame + 1) % len(self.standing_frames)
-				bottom = self.rect.bottom
+				midbottom = self.rect.midbottom
 				self.image = self.standing_frames[self.current_frame]
 				self.rect = self.image.get_rect()
-				self.rect.bottom = bottom
+				self.rect.midbottom = midbottom
+
+class Cloud(pg.sprite.Sprite):
+	def __init__(self, game):
+		self._layer = CLOUD_LAYER
+		self.groups = game.all_sprites, game.clouds
+		pg.sprite.Sprite.__init__(self, self.groups)
+
+		self.game = game
+		self.image = choice(self.game.cloud_images)
+		self.image.set_colorkey(BLACK)
+		self.rect = self.image.get_rect()
+		scale = randrange(50, 101) / 100
+		self.image = pg.transform.scale(self.image, (int(self.rect.width * scale), int(self.rect.height * scale)))
+		self.rect.centerx = randrange(WIDTH)
+		self.rect.centery = randrange(-CLOUD_SPAWN_OFFSET, -50)
+	
+	def update(self):
+		if self.rect.top > HEIGHT * 2:
+			self.kill()
 
 class Platform(pg.sprite.Sprite):
 	def __init__(self, game, x, y):
+		self._layer = PLATFORM_LAYER
 		self.groups = game.all_sprites, game.platforms
 		pg.sprite.Sprite.__init__(self, self.groups)
 
@@ -160,6 +182,7 @@ class Platform(pg.sprite.Sprite):
 
 class Pow(pg.sprite.Sprite):
 	def __init__(self, game, plat):
+		self._layer = POWERUP_LAYER
 		self.groups = game.all_sprites, game.powerups
 		pg.sprite.Sprite.__init__(self, self.groups)
 
@@ -175,4 +198,45 @@ class Pow(pg.sprite.Sprite):
 	def update(self):
 		self.rect.bottom = self.plat.rect.top - 5
 		if not self.game.platforms.has(self.plat):
+			self.kill()
+
+class Mob(pg.sprite.Sprite):
+	def __init__(self, game):
+		self._layer = MOB_LAYER
+		self.groups = game.all_sprites, game.mobs
+		pg.sprite.Sprite.__init__(self, self.groups)
+
+		self.game = game
+		self.image_up = self.game.spritesheet.get_image(566, 510, 122, 139)
+		self.image_up.set_colorkey(BLACK)
+		self.image_down = self.game.spritesheet.get_image(568, 1534, 122, 135)
+		self.image_down.set_colorkey(BLACK)
+		self.image = self.image_up
+		self.rect = self.image.get_rect()
+		self.rect.centerx = choice([-MOB_SPAWN_OFFSET, WIDTH + MOB_SPAWN_OFFSET])
+		self.vx = randrange(1, 4)
+		if self.rect.centerx > WIDTH:
+			self.vx *= -1
+		self.rect.y = randrange(HEIGHT / 2)
+		self.vy = 0
+		self.ay = 0.5
+
+	
+	def update(self):
+		self.rect.centerx += self.vx
+		self.vy += self.ay
+		if self.vy > 3 or self.vy < -3:
+			self.ay *= -1
+
+		center = self.rect.center
+		if self.ay < 0:
+			self.image = self.image_up
+		else:
+			self.image = self.image_down
+		self.mask = pg.mask.from_surface(self.image)
+		self.rect = self.image.get_rect()
+		self.rect.center = center
+		self.rect.y += self.vy
+
+		if self.rect.right < -MOB_SPAWN_OFFSET or self.rect.left > WIDTH + MOB_SPAWN_OFFSET:
 			self.kill()
