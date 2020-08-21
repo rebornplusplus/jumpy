@@ -53,14 +53,6 @@ class Player(pg.sprite.Sprite):
 		self.jump_frame = self.game.spritesheet.get_image(382, 763, 150, 181)
 		self.jump_frame.set_colorkey(BLACK)
 	
-	def feet(self):
-		# returns the feet line as a sprite for better collisions
-		feet_line = Player(self.game)
-		feet_line.image = pg.Surface((self.rect.width / 2, 1))
-		feet_line.rect = feet_line.image.get_rect()
-		feet_line.rect.midbottom = self.rect.midbottom
-		return feet_line
-	
 	def jump_cut(self):
 		# short jump
 		if self.jumping:
@@ -239,4 +231,6 @@ class Mob(pg.sprite.Sprite):
 		self.rect.y += self.vy
 
 		if self.rect.right < -MOB_SPAWN_OFFSET or self.rect.left > WIDTH + MOB_SPAWN_OFFSET:
+			if self.game.near_mobs.has(self):
+				self.game.score += SCORE_PER_MOB
 			self.kill()

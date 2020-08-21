@@ -5,6 +5,7 @@
 
 import pygame as pg
 import random
+import math
 from settings import *
 from sprites import *
 from os import path
@@ -31,7 +32,7 @@ class Game:
 		except:
 			self.highscore = 0
 
-		# load spritesheet
+		# load images
 		img_dir = path.join(self.dir, 'img')
 		self.spritesheet = Spritesheet(path.join(img_dir, SPRITESHEET))
 		self.cloud_images = []
@@ -54,10 +55,11 @@ class Game:
 		self.total_games += 1
 		# sprite groups
 		self.all_sprites = pg.sprite.LayeredUpdates()
+		self.clouds = pg.sprite.Group()
 		self.platforms = pg.sprite.Group()
 		self.powerups = pg.sprite.Group()
 		self.mobs = pg.sprite.Group()
-		self.clouds = pg.sprite.Group()
+		self.near_mobs = pg.sprite.Group()
 		# create player
 		self.player = Player(self)
 		# spawn new clouds
@@ -106,6 +108,12 @@ class Game:
 					self.playing = False
 					break
 
+		# check if mob is too close to player, add score
+		for mob in self.mobs:
+			if not self.near_mobs.has(mob):
+				if self.rect_rect_dist(self.player.rect, mob.rect) < DIST_MOB_PLAYER:
+					self.near_mobs.add(mob)
+
 		# check if player hits a platform - only if falling
 		if self.player.vel.y > 0:
 			hits = pg.sprite.spritecollide(self.player, self.platforms, False)
@@ -137,7 +145,7 @@ class Game:
 				plat.rect.y += max(abs(self.player.vel.y), 2)
 				if plat.rect.top >= HEIGHT:
 					plat.kill()
-					self.score += 10
+					self.score += SCORE_PER_PLAT + randrange(0, 1)
 
 		# power ups
 		pow_hits = pg.sprite.spritecollide(self.player, self.powerups, True)
@@ -177,6 +185,15 @@ class Game:
 			if event.type == pg.KEYUP:
 				if event.key == pg.K_SPACE or event.key == pg.K_w:
 					self.player.jump_cut()
+				if event.key == pg.K_ESCAPE:
+					pg.mixer.music.pause()
+					self.wait_for_key()
+					pg.mixer.music.unpause()
+	
+	def draw_bg(self):
+		# draw background
+		for layer in self.bg_layers:
+			self.screen.blit(layer, layer.get_rect())
 
 	def draw(self):
 		# game loop - draw
@@ -204,9 +221,14 @@ class Game:
 		pg.mixer.music.play(loops = -1)
 		self.screen.fill(BGCOLOR)
 		self.draw_text(TITLE, 50, WHITE, WIDTH / 2, HEIGHT / 4)
-		self.draw_text("Arrows to move, Space to jump.", 22, WHITE, WIDTH / 2, HEIGHT / 2)
-		self.draw_text("Press a key to continue...", 18, WHITE, WIDTH / 2, HEIGHT * 3 / 4)
 		self.draw_text("High Score: " + str(self.highscore), 22, WHITE, WIDTH / 2, 15)
+		bunny_img = self.spritesheet.get_image(382, 763, 150, 181)
+		bunny_img.set_colorkey(BLACK)
+		bunny_rect = bunny_img.get_rect()
+		bunny_rect.center = (WIDTH / 2, HEIGHT / 2)
+		self.screen.blit(bunny_img, bunny_rect)
+		self.draw_text("Arrows to move, Space to jump.", 22, WHITE, WIDTH / 2, bunny_rect.bottom + 40)
+		self.draw_text("Press a key to continue.", 18, WHITE, WIDTH / 2, bunny_rect.bottom + 150)
 		pg.display.flip()
 		self.wait_for_key()
 		pg.mixer.music.fadeout(500)
@@ -221,18 +243,22 @@ class Game:
 
 		self.screen.fill(BGCOLOR)
 		self.draw_text("Game Over!", 50, WHITE, WIDTH / 2, HEIGHT / 4)
-		self.draw_text("Score: " + str(self.score), 22, WHITE, WIDTH / 2, HEIGHT / 2)
-		self.draw_text("Press a key to play again.", 18, WHITE, WIDTH / 2, HEIGHT * 3 / 4)
+		bunny_img = self.spritesheet.get_image(382, 946, 150, 174)
+		bunny_img.set_colorkey(BLACK)
+		bunny_rect = bunny_img.get_rect()
+		bunny_rect.center = (WIDTH / 2, HEIGHT / 2)
+		self.screen.blit(bunny_img, bunny_rect)
+		self.draw_text("Score: " + str(self.score), 22, WHITE, WIDTH / 2, bunny_rect.bottom + 40)
 		if self.score > self.highscore:
 			self.highscore = self.score
-			self.draw_text("NEW HIGH SCORE!", 22, WHITE, WIDTH / 2, HEIGHT / 2 + 40)
+			self.draw_text("NEW HIGH SCORE!", 22, WHITE, WIDTH / 2, bunny_rect.bottom + 85)
 			self.write_data()
 		else :
-			self.draw_text("High Score: " + str(self.highscore), 22, WHITE, WIDTH / 2, HEIGHT / 2 + 40)
+			self.draw_text("High Score: " + str(self.highscore), 22, WHITE, WIDTH / 2, bunny_rect.bottom + 85)
+		self.draw_text("Press a key to play again.", 18, WHITE, WIDTH / 2, bunny_rect.bottom + 150)
 		pg.display.flip()
 		self.wait_for_key()
 		pg.mixer.music.fadeout(500)
-
 
 	def draw_text(self, text, size, color, x, y):
 		font = pg.font.Font(self.font_name, size)
@@ -240,6 +266,34 @@ class Game:
 		text_rect = text_surface.get_rect()
 		text_rect.midtop = (x, y)
 		self.screen.blit(text_surface, text_rect)
+	
+	def rect_rect_dist(self, rect1, rect2):
+		x1, y1 = rect1.topleft
+		x1b, y1b = rect1.bottomright
+		x2, y2 = rect2.topleft
+		x2b, y2b = rect2.bottomright
+		left = x2b < x1
+		right = x1b < x2
+		top = y2b < y1
+		bottom = y1b < y2
+		if bottom and left:
+			return math.hypot(x2b-x1, y2-y1b)
+		elif left and top:
+			return math.hypot(x2b-x1, y2b-y1)
+		elif top and right:
+			return math.hypot(x2-x1b, y2b-y1)
+		elif right and bottom:
+			return math.hypot(x2-x1b, y2-y1b)
+		elif left:
+			return x1 - x2b
+		elif right:
+			return x2 - x1b
+		elif top:
+			return y1 - y2b
+		elif bottom:
+			return y2 - y1b
+		else:  # rectangles intersect
+			return 0
 
 g = Game()
 g.show_start_screen()
