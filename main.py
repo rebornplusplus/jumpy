@@ -119,22 +119,28 @@ class Game:
 			hits = pg.sprite.spritecollide(self.player, self.platforms, False)
 			if hits:
 				lowest = hits[0]
+				found = False
 				for hit in hits:
-					if hit.rect.bottom > lowest.rect.bottom:
-						lowest = hit
-				if self.player.pos.x < lowest.rect.right + 10 and \
-				   self.player.pos.x > lowest.rect.left - 10:
-					if self.player.pos.y < lowest.rect.centery:
-						self.player.pos.y = lowest.rect.top
-						self.player.vel.y = 0
-						self.player.jumping = False
+					if self.player.pos.x < hit.rect.right + 10 and \
+					   self.player.pos.x > hit.rect.left - 10 and \
+					   self.player.pos.y < hit.rect.centery:
+						if not found or hit.rect.bottom > lowest.rect.bottom:
+							lowest = hit
+							found = True
+				if found:
+					self.player.pos.y = lowest.rect.top
+					self.player.vel.y = 0
+					self.player.jumping = False
 
 		# if player reaches top 1/4 of screen, scroll
 		if self.player.rect.top <= HEIGHT / 4:
 			# spawn clouds
 			if randrange(100) < CLOUD_SPAWN_PCT:
 				Cloud(self)
+			before_y = self.player.pos.y
 			self.player.pos.y += max(abs(self.player.vel.y), 2)
+			if self.playing:
+				self.score += int((self.player.pos.y - before_y) * SCORE_DIST_MULTIPLIER)
 			for cloud in self.clouds:
 				cloud.rect.y += max(abs(self.player.vel.y / 2), 2)
 			for mob in self.mobs:
@@ -145,14 +151,14 @@ class Game:
 				plat.rect.y += max(abs(self.player.vel.y), 2)
 				if plat.rect.top >= HEIGHT:
 					plat.kill()
-					self.score += SCORE_PER_PLAT + randrange(0, 1)
+					self.score += SCORE_PER_PLAT
 
 		# power ups
 		pow_hits = pg.sprite.spritecollide(self.player, self.powerups, True)
 		for pow in pow_hits:
 			if pow.type == 'boost':
 				self.boost_sound.play()
-				self.player.vel.y = -BOOST_POWER
+				self.player.vel.y = min(0, self.player.vel.y) - BOOST_POWER
 				self.player.jumping = False	# so jump_cut doesn't cut it
 
 		# Die!
@@ -164,10 +170,11 @@ class Game:
 		if len(self.platforms) == 0:
 			self.playing = False
 
-		# spawn new platforms
-		while self.playing and len(self.platforms) < AVG_PLATFORM_IN_SCREEN:
-			width = random.randrange(50, 100)
-			Platform(self, random.randrange(0, WIDTH - width), random.randrange(-75, -30))
+		# # spawn new platforms
+		# while self.playing and len(self.platforms) < AVG_PLATFORM_IN_SCREEN:
+		# 	width = random.randrange(50, 100)
+		# 	Platform(self, random.randrange(0, WIDTH - width), random.randrange(-75, -30))
+		self.spawn_platforms()
 
 	def events(self):
 		# game loop - events
@@ -190,11 +197,6 @@ class Game:
 					self.wait_for_key()
 					pg.mixer.music.unpause()
 	
-	def draw_bg(self):
-		# draw background
-		for layer in self.bg_layers:
-			self.screen.blit(layer, layer.get_rect())
-
 	def draw(self):
 		# game loop - draw
 		self.screen.fill(BGCOLOR)
@@ -294,6 +296,23 @@ class Game:
 			return y2 - y1b
 		else:  # rectangles intersect
 			return 0
+	
+	def spawn_platforms(self):
+		# spawn new platforms so they don't overlap that much
+		while self.player.rect.y < HEIGHT and len(self.platforms) < AVG_PLATFORM_IN_SCREEN:
+			width = random.randrange(50, 100)
+			cur = Platform(self, random.randrange(0, WIDTH - width), random.randrange(-75, -30))
+			for plat in self.platforms:
+				if cur is not plat and cur.rect.colliderect(plat):
+					x1 = max(cur.rect.left, plat.rect.left)
+					x2 = min(cur.rect.right, plat.rect.right)
+					y1 = max(cur.rect.top, plat.rect.top)
+					y2 = min(cur.rect.bottom, plat.rect.bottom)
+					intersection = pg.Rect(x1, y1, x2 - x1, y2 - y1)
+					if (intersection.width * intersection.height) / (cur.rect.width * cur.rect.height) > PLATFORM_OVERLAP_RATIO:
+						cur.kill()
+					if (intersection.width * intersection.height) / (plat.rect.width * plat.rect.height) > PLATFORM_OVERLAP_RATIO:
+						plat.kill()
 
 g = Game()
 g.show_start_screen()
